@@ -125,8 +125,35 @@ class DirectoryService
      */
     public function authenticate($username, $password)
     {
-        $this->bind($username, $password);
+        try {
+            $this->ldapConnect();
+            $this->bindProvider->bind($username, $password);
+            $entries = $this->getUserEntries($username);
+            if (!empty($entries)) {
+                $this->bindProvider->verifyCredentials($entries[0]['dn'], $password);
+                // get all entries in the second run in the case of anonymous bind
+                $anonymousBind = Arrays::getValueByPath($this->options, 'bind.anonymous');
+                if ($anonymousBind === true) {
+                    $entries = $this->getUserEntries($username);
+                } else {
+                    $this->bindProvider->bind($username, $password);
+                }
+            }
+            return $entries[0];
+        } catch (\Exception $exception) {
+            throw new Exception('Error during Ldap server authentication: ' . $exception->getMessage(), 1323167213);
+        }
+    }
 
+    /**
+     * Get the user entities from the Ldap server.
+     *
+     * @param $username
+     * @return array
+     * @throws Exception
+     */
+    public function getUserEntries($username)
+    {
         $searchResult = @ldap_search(
             $this->bindProvider->getLinkIdentifier(),
             $this->options['baseDn'],
@@ -137,12 +164,7 @@ class DirectoryService
             throw new Exception('Error during Ldap user search: ' . ldap_errno($this->bindProvider->getLinkIdentifier()), 1443798372);
         }
 
-        $entries = ldap_get_entries($this->bindProvider->getLinkIdentifier(), $searchResult);
-        if (empty($entries) || !isset($entries[0])) {
-            throw new Exception('Error while authenticating: authenticated user could not be fetched from the directory', 1488289104);
-        }
-
-        return $entries[0];
+        return ldap_get_entries($this->bindProvider->getLinkIdentifier(), $searchResult);
     }
 
     /**
