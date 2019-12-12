@@ -54,29 +54,23 @@ class LdapBind extends AbstractBindProvider
     public function bind($username, $password)
     {
         try {
-            if ($username !== null && $password !== null) {
-                // This is a fallback to the original usage of bind.dn, usage of user.dn is preferred
-                if (isset($this->options['user']['dn'])) {
-                    $bindDn = str_replace('?', $username, $this->options['user']['dn']);
+            $anonymousBind = FALSE;
+            if (isset($this->options['bind']['anonymous']) && $this->options['bind']['anonymous'] === TRUE) {
+                $ldapBindResult = ldap_bind($this->linkIdentifier);
+                $anonymousBind = true;
+            }
+
+            if (!$anonymousBind) {
+                if (empty($this->options['bind']['password'])) {
+                    $ldapBindResult = ldap_bind($this->linkIdentifier, str_replace('?', $username, $this->options['bind']['dn']), $password);
                 } else {
-                    $bindDn = str_replace('?', $username, $this->options['bind']['dn']);
+                    $ldapBindResult = ldap_bind($this->linkIdentifier, $this->options['bind']['dn'], $this->options['bind']['password']);
                 }
-
-                ldap_bind($this->linkIdentifier, $bindDn, $password);
-                return;
             }
 
-            if ($username === null && $password === null && isset($this->options['bind']['anonymous']) && $this->options['bind']['anonymous'] === true) {
-                ldap_bind($this->linkIdentifier);
-                return;
+            if (!isset($ldapBindResult) || $ldapBindResult === FALSE) {
+                throw new Exception('Could not bind to LDAP server', 1327748989);
             }
-
-            if ($username === null && $password === null) {
-                ldap_bind($this->linkIdentifier, $this->options['bind']['dn'], $this->options['bind']['password']);
-                return;
-            }
-
-            throw new Exception('Could not bind to Ldap server', 1327748989);
         } catch (\Exception $exception) {
             throw new Exception('Could not bind to Ldap server. Error was: ' . $exception->getMessage(), 1327748989);
         }
